@@ -4,15 +4,16 @@
 
 ## Запуск в Windows PowerShell
 
-Используйте Python 3.11 или 3.12. Откройте терминал в корне проекта.
+Нужны Python 3.11/3.12 и локально установленная [Ollama](https://ollama.com) с моделью по умолчанию.
 
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 Copy-Item mysite/.env.example mysite/.env
+ollama pull qwen2.5:3b
 ```
 
-Впишите свой ключ в `mysite/.env`. Ключ нельзя публиковать. Модель по умолчанию `openai/gpt-4o-mini` платная; расходы зависят от OpenRouter. Можно выбрать другую модель с поддержкой tool calling. Бесплатные модели не гарантируют поддержку инструментов и структурированного вывода.
+Модель по умолчанию `qwen2.5:3b` работает локально через Ollama, API-ключи не нужны. В `mysite/.env` можно сменить модель (`OLLAMA_MODEL`) и адрес (`OLLAMA_BASE_URL`). Нужна модель с поддержкой tool calling и структурированного вывода — маленькие модели чаще ошибаются.
 
 ```powershell
 .\.venv\Scripts\python.exe -m alembic upgrade head
@@ -21,9 +22,9 @@ Copy-Item mysite/.env.example mysite/.env
 
 Swagger: http://127.0.0.1:8000/docs
 
-SQLite-файл `repair.db` создаётся миграцией в корне проекта. Папка `admin` оставлена для соответствия твоей структуре, админ-панель не реализована.
+SQLite-файл `repair.db` создаётся миграцией в корне проекта.
 
-При первом старте embeddings скачиваются с Hugging Face: нужны интернет, место на диске и время. База знаний индексируется заново при запуске и хранится в памяти. `/health` показывает готовность AI-компонентов; доступность удалённой модели проверяется только при реальном запросе. Если нет API-ключа или RAG не загрузился, обычные CRUD-эндпоинты продолжают работать после миграции.
+При первом старте embeddings скачиваются с Hugging Face: нужны интернет, место на диске и время. База знаний индексируется заново при запуске и хранится в памяти. `/health` показывает готовность AI-компонентов; доступность Ollama проверяется только при реальном запросе. Если Ollama недоступна или RAG не загрузился, обычные CRUD-эндпоинты продолжают работать после миграции.
 
 ## Структура
 
@@ -34,7 +35,6 @@ RepairDeskAI/
 │   ├── env.py
 │   └── script.py.mako
 ├── mysite/
-│   ├── admin/
 │   ├── api/
 │   │   ├── chat.py
 │   │   └── repair.py
@@ -79,7 +79,7 @@ RepairDeskAI/
 
 `TextLoader → Documents → RecursiveCharacterTextSplitter → HuggingFaceEmbeddings → InMemoryVectorStore → similarity_search → ChatPromptTemplate → model.with_structured_output(KnowledgeAnswer)`.
 
-`with_structured_output()` возвращает Pydantic-объект, а FastAPI сериализует его в настоящий JSON, не строку с Markdown-ограждениями. Используется `method="function_calling"`; выбранная модель должна поддерживать инструменты. Фрагменты и векторная похожесть не гарантируют, что модель всегда правильно определит отсутствие ответа.
+`with_structured_output()` возвращает Pydantic-объект, а FastAPI сериализует его в настоящий JSON, не строку с Markdown-ограждениями. Используется `method="json_schema"`; модель должна поддерживать структурированный вывод. Фрагменты и векторная похожесть не гарантируют, что модель всегда правильно определит отсутствие ответа.
 
 Запрос `POST /ask`:
 
@@ -158,13 +158,13 @@ RepairDeskAI/
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Тесты покрывают три функции проверки входного текста без запросов к AI. Интеграционная работа OpenRouter и загрузка embeddings требуют отдельного запуска с ключом и интернетом. Версии зависимостей ограничены диапазонами, но не зафиксированы lock-файлом.
+Тесты покрывают три функции проверки входного текста без запросов к AI. Интеграционная работа с живой Ollama и загрузка embeddings требуют отдельного запуска. Версии зависимостей ограничены диапазонами, но не зафиксированы lock-файлом.
 
 ## Из твоего списка
 
 В основном проекте используются HumanMessage, ToolMessage, ответы модели AIMessage внутри агента, ChatPromptTemplate, StrOutputParser, LCEL, RunnableLambda, RunnableSequence, ainvoke, Pydantic, with_structured_output, @tool, tool calling, create_agent, Documents, loaders, splitters, embeddings, vector stores и similarity search.
 
-SystemMessage создаётся внутри шаблона и агента. temperature и max_tokens настраиваются в config.py. AIMessageChunk, streaming, batch, RunnableParallel, RunnablePassthrough и ручной agent loop не добавлены, чтобы базовый проект не был перегружен. `top_k` и `num_predict` зависят от провайдера и не являются универсальными параметрами ChatOpenAI; `num_predict` обычно относится к Ollama. Context window — ограничение модели, а не команда.
+SystemMessage создаётся внутри шаблона и агента. temperature и num_predict настраиваются в config.py. AIMessageChunk, streaming, batch, RunnableParallel, RunnablePassthrough и ручной agent loop не добавлены, чтобы базовый проект не был перегружен. `top_k` в конфиг не вынесен; `num_predict` — параметр Ollama. Context window — ограничение модели, а не команда.
 
 ## Ограничения
 
