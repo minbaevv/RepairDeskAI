@@ -40,3 +40,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local only
+tests/
+TEST_REPORT.txt
